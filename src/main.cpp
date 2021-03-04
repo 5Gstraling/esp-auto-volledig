@@ -5,13 +5,13 @@
 #define triggerPin 4      // pin voor de trigger
 #define echoPin 2         // pin voor de echo
 #define soundSpeed 343.0  // snelheid van het geluid (m/s)
-const byte buzzer = 28;
+const byte buzzer = 25;
 const byte slot = 26;
 // init variables
 long echoTime = 0;
 float distance = 0;
 
-
+const byte druk = 19;
 const byte led_gpio = 32; // pin waar de PWM pin van alle motors aangesloten wordt
 const byte pin_links = 5; // pin waar de richting van de linkse motoren aanhangt
 const byte pin_rechts = 18; // pin waar de richting van de rechtse motoren aanhangt
@@ -22,11 +22,14 @@ int timeint = 30000;
 int rssi[10];
 int i = 0;
 int besturing[4]= {0,1,2,3};
+
 void shuffle(){
-  int k = random(1,4);
-  for (int d = 0 ; k<4;k++){
+  int k = random(1,3);
+  for (int d = 0 ; d<4;d++){
     besturing[d] = (besturing[d]+k)%4;
+    Serial.println(besturing[d]);
   }
+  Serial.println("shuffle");
 }
 
 char* ssid1 = "stralingslocatie";
@@ -36,7 +39,7 @@ char* password2 = "excitedtuba713";
 
 #define MQTT_SERVER   "192.168.1.2"
 #define MQTT_PORT     1883
-IPAddress local_IP(192, 168, 1, 184);
+IPAddress local_IP(192, 168, 1, 18);
 // Set your Gateway IP address
 IPAddress gateway(192, 168, 1, 1);
 
@@ -66,6 +69,7 @@ int getDistance(){
   Serial.print("Afstand = ");
   Serial.print((String)distance);
   Serial.println(" cm");
+  return distance;
 }
 
 void wifi1(){
@@ -92,18 +96,25 @@ void wifi2(int rssi){
   delay(100);
   Serial.println("verbinden met broker");
   WiFi.begin(ssid2,password2);
-    Serial.print("Connecting");
+  Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(100);
-    Serial.print(".");
+    Serial.print("."); 
+    
   }
   Serial.println();
-  char rs[3];
-  String(rssi).toCharArray(rs,3);
-  client.connect("esp32");
-  client.publish("rssiwaarde", rs);
-  Serial.println(rs);
+  char cstr[16];
+  int num = rssi;
+  String str;
+  str = String(num);
+  str.toCharArray(cstr,16);
+  Serial.println(cstr);
+  Serial.println("ok2");
+  Serial.println("ok2");
+  client.connect("esp32auto");
+  client.publish("rssiwaarde", cstr);
+  Serial.println(cstr);
   
   Serial.print(client.state());
 } 
@@ -147,11 +158,22 @@ void setup() {
   Serial.print("Connecting");
   pinMode(triggerPin, OUTPUT);  // zet trigger pin als uitgang
   pinMode(echoPin, INPUT);      // zet echo pin als ingang
-  digitalWrite(slot, LOW);
+  pinMode(slot, OUTPUT); 
+  pinMode(buzzer, OUTPUT); 
+  digitalWrite(slot, HIGH);
   digitalWrite(buzzer ,LOW);
 }
 
 void loop() { 
+  long now = millis();
+  Serial.println(now);
+  Serial.println(lastMsg);
+  if (now - lastMsg > 10000)
+  {
+    lastMsg = now;
+    shuffle();
+  }
+  
   if( digitalRead(13)==HIGH){   
     Serial.println("ontvangen signaal");
     if( digitalRead(12)==HIGH){
@@ -191,20 +213,24 @@ void loop() {
   }
   
   rssi[i] = WiFi.RSSI();
+  i++;
   if(i == 9){
     int rss =0;    
     for(int d= 0; d<10;d++){
-      rss += rssi[d];
+      rss =rss + rssi[d];
     }
+    Serial.println(rss);
+    rss= rss/(-10);
     if (getDistance()>10){
-      rss = 200;      
+      wifi2(200);rss=200;
+      while(getDistance()>10){
+        digitalWrite(buzzer ,HIGH);
+        delay(200);
+        digitalWrite(buzzer ,LOW);
+      }      
     }
-    wifi2(rss);
-    while(getDistance()>10){
-      digitalWrite(buzzer ,HIGH);
-      delay(200);
-      digitalWrite(buzzer ,LOW);
-    }
+    
+    wifi2(rss);    
     if(rss == 200){
       for(int o = 0; o< 10 ; o++ ){
         digitalWrite(buzzer ,HIGH);
@@ -212,14 +238,16 @@ void loop() {
         digitalWrite(buzzer ,LOW);
       }
     }
-    if(rss < 20){
+    if(rss < 30){
+      if(digitalRead(druk)==HIGH){
       stop();
       delay(100);
-      digitalWrite(slot, HIGH);
-      delay(2000);
       digitalWrite(slot, LOW);
+      delay(2000);
+      digitalWrite(slot, HIGH);}
     }    
     wifi1();
+    i =0;
   }
   
 }
